@@ -1,89 +1,27 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Apex Pursuit - Prototype</title>
-    <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            user-select: none;
-            touch-action: none;
-        }
-        body, html {
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background-color: #111;
-            font-family: Arial, sans-serif;
-        }
-        #game-container {
-            width: 100%;
-            height: 100%;
-            position: absolute;
-            top: 0;
-            left: 0;
-        }
-        .touch-ui {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 10;
-            pointer-events: none;
-            display: flex;
-            justify-content: space-between;
-            padding: 20px;
-        }
-        .control-group {
-            display: flex;
-            gap: 15px;
-            align-items: flex-end;
-            pointer-events: auto;
-        }
-        .btn {
-            width: 70px;
-            height: 70px;
-            background: rgba(255, 255, 255, 0.2);
-            border: 2px solid rgba(255, 255, 255, 0.5);
-            border-radius: 50%;
-            color: white;
-            font-weight: bold;
-            font-size: 18px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        .btn:active {
-            background: rgba(255, 255, 255, 0.5);
-        }
-        .btn-handbrake {
-            width: 60px;
-            height: 60px;
-            background: rgba(255, 50, 50, 0.3);
-            font-size: 12px;
-        }
-    </style>
-    <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>ШАШКИ ПО БИШКЕКУ</title>
+<style>
+  html, body {
+    margin: 0; padding: 0;
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #0a0a0a;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  #game-container { width: 100%; height: 100%; }
+  canvas { display: block; }
+</style>
 </head>
 <body>
-    <div id="game-container"></div>
-
-    <div class="touch-ui">
-        <div class="control-group">
-            <div class="btn" id="btn-left">◄</div>
-            <div class="btn" id="btn-right">►</div>
-        </div>
-        <div class="control-group">
-            <div class="btn btn-handbrake" id="btn-handbrake">P</div>
-            <div class="btn" id="btn-brake" style="background: rgba(230,80,80,0.3);">S</div>
-            <div class="btn" id="btn-gas" style="background: rgba(80,230,80,0.3);">W</div>
-        </div>
-    </div>
-
-    <script type="module" src="./src/main.js"></script>
+  <div id="game-container"></div>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
+  <script src="src/scenes/GameScene.js"></script>
+  <script src="src/main.js"></script>
 </body>
 </html>
