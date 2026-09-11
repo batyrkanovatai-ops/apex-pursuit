@@ -1,4 +1,4 @@
-// ===== ФИЗИКА МАШИНЫ =====
+// ===== ФИЗИКА МАШИНЫ (общая для игрока и полиции) =====
 class Car {
   constructor(config) {
     this.x = config.x || 0;
@@ -31,8 +31,7 @@ class Car {
         this.forwardSpeed -= this.acceleration * 0.6 * massFactor * input.brake * dt;
       }
     } else {
-      const drag = this.dragCoefficient * this.forwardSpeed * dt;
-      this.forwardSpeed -= drag;
+      this.forwardSpeed -= this.dragCoefficient * this.forwardSpeed * dt;
     }
 
     let currentGrip = this.grip * surfaceGrip;
@@ -52,12 +51,10 @@ class Car {
 
     const slipAmount = -input.steer * this.forwardSpeed * this.drift * (0.4 + speedRatio * 0.6) * dt;
     this.lateralSpeed += slipAmount;
-
     this.lateralSpeed -= this.lateralSpeed * currentGrip * dt;
 
     const cos = Math.cos(this.heading);
     const sin = Math.sin(this.heading);
-
     const vx = cos * this.forwardSpeed - sin * this.lateralSpeed;
     const vy = sin * this.forwardSpeed + cos * this.lateralSpeed;
 
@@ -72,9 +69,7 @@ class Car {
 
 // ===== МЕНЮ =====
 class MenuScene extends Phaser.Scene {
-  constructor() {
-    super('MenuScene');
-  }
+  constructor() { super('MenuScene'); }
 
   create() {
     const { width, height } = this.scale;
@@ -119,38 +114,67 @@ class MenuScene extends Phaser.Scene {
 
 // ===== ИГРОВАЯ СЦЕНА =====
 class GameScene extends Phaser.Scene {
-  constructor() {
-    super('GameScene');
-  }
+  constructor() { super('GameScene'); }
 
   preload() {
-    this.createCarTexture();
+    this.createTextures();
   }
 
   create() {
+    this.worldWidth = 3200;
+    this.worldHeight = 3200;
+    this.BLOCK = 640;
+    this.ROAD_WIDTH = 150;
+
+    this.isBusted = false;
+    this.wantedLevel = 0;
+    this.wantedCooldown = 0;
+    this.wantedDecayTimer = 0;
+    this.busterTimer = 0;
+
     this.buildWorld();
     this.buildPlayerCar();
+    this.buildTraffic();
+    this.policeCars = [];
     this.setupCamera();
     this.setupKeyboard();
     this.setupTouchControls();
     this.setupHUD();
   }
 
-  createCarTexture() {
+  // ---------- ТЕКСТУРЫ ----------
+  createTextures() {
+    this.makeCarTexture('car_player', 0xd63333, 0x7a1414);
+    this.makeCarTexture('car_npc', 0x3b6ea5, 0x1f3a5a);
+    this.makePoliceTexture('car_police');
+
+    const tile = this.add.graphics();
+    const ts = 128;
+    tile.fillStyle(0x2b2f36, 1);
+    tile.fillRect(0, 0, ts, ts);
+    tile.fillStyle(0x3a3f47, 1);
+    for (let i = 0; i < 40; i++) {
+      tile.fillRect(Phaser.Math.Between(0, ts), Phaser.Math.Between(0, ts), 2, 2);
+    }
+    tile.generateTexture('asphalt_tile', ts, ts);
+    tile.destroy();
+  }
+
+  makeCarTexture(key, bodyColor, edgeColor) {
     const g = this.add.graphics();
     const w = 44, h = 92;
 
     g.fillStyle(0x000000, 0.25);
     g.fillEllipse(w / 2, h / 2 + 6, w * 0.9, h * 0.5);
 
-    g.fillStyle(0xd63333, 1);
+    g.fillStyle(bodyColor, 1);
     g.fillRoundedRect(4, 2, w - 8, h - 4, 14);
 
     g.fillStyle(0x1b2733, 1);
     g.fillRoundedRect(9, 14, w - 18, 20, 6);
     g.fillRoundedRect(9, h - 34, w - 18, 18, 6);
 
-    g.lineStyle(2, 0x7a1414, 1);
+    g.lineStyle(2, edgeColor, 1);
     g.strokeRoundedRect(4, 2, w - 8, h - 4, 14);
 
     g.fillStyle(0xfff3b0, 1);
@@ -167,44 +191,119 @@ class GameScene extends Phaser.Scene {
     g.fillRoundedRect(-2, h - 34, 8, 18, 3);
     g.fillRoundedRect(w - 6, h - 34, 8, 18, 3);
 
-    g.generateTexture('car_player', w, h);
+    g.generateTexture(key, w, h);
     g.destroy();
-
-    const tile = this.add.graphics();
-    const ts = 128;
-    tile.fillStyle(0x2b2f36, 1);
-    tile.fillRect(0, 0, ts, ts);
-    tile.fillStyle(0x3a3f47, 1);
-    for (let i = 0; i < 40; i++) {
-      tile.fillRect(Phaser.Math.Between(0, ts), Phaser.Math.Between(0, ts), 2, 2);
-    }
-    tile.generateTexture('asphalt_tile', ts, ts);
-    tile.destroy();
   }
 
-  buildWorld() {
-    this.worldWidth = 3000;
-    this.worldHeight = 3000;
+  makePoliceTexture(key) {
+    const g = this.add.graphics();
+    const w = 44, h = 92;
 
+    g.fillStyle(0x000000, 0.25);
+    g.fillEllipse(w / 2, h / 2 + 6, w * 0.9, h * 0.5);
+
+    g.fillStyle(0xf2f2f2, 1);
+    g.fillRoundedRect(4, 2, w - 8, h - 4, 14);
+
+    g.fillStyle(0x1b2733, 1);
+    g.fillRoundedRect(9, 14, w - 18, 20, 6);
+    g.fillRoundedRect(9, h - 34, w - 18, 18, 6);
+
+    // Синяя/красная полоса
+    g.fillStyle(0x1e3a8a, 1);
+    g.fillRect(6, h / 2 - 10, w - 12, 6);
+    g.fillStyle(0xb91c1c, 1);
+    g.fillRect(6, h / 2 - 2, w - 12, 6);
+
+    // Мигалка на крыше
+    g.fillStyle(0x2563eb, 1);
+    g.fillRect(w / 2 - 10, h / 2 - 24, 8, 8);
+    g.fillStyle(0xdc2626, 1);
+    g.fillRect(w / 2 + 2, h / 2 - 24, 8, 8);
+
+    g.fillStyle(0xfff3b0, 1);
+    g.fillRoundedRect(6, 2, 8, 6, 2);
+    g.fillRoundedRect(w - 14, 2, 8, 6, 2);
+    g.fillStyle(0xff3b3b, 1);
+    g.fillRoundedRect(6, h - 8, 8, 6, 2);
+    g.fillRoundedRect(w - 14, h - 8, 8, 6, 2);
+
+    g.fillStyle(0x111111, 1);
+    g.fillRoundedRect(-2, 16, 8, 18, 3);
+    g.fillRoundedRect(w - 6, 16, 8, 18, 3);
+    g.fillRoundedRect(-2, h - 34, 8, 18, 3);
+    g.fillRoundedRect(w - 6, h - 34, 8, 18, 3);
+
+    g.generateTexture(key, w, h);
+    g.destroy();
+  }
+
+  // ---------- МИР: ДОРОГИ + ЗДАНИЯ ----------
+  buildWorld() {
     this.add.tileSprite(0, 0, this.worldWidth, this.worldHeight, 'asphalt_tile').setOrigin(0, 0);
 
-    const lines = this.add.graphics();
-    lines.lineStyle(4, 0xf5c518, 0.6);
-    for (let x = 200; x < this.worldWidth; x += 400) {
-      lines.beginPath();
-      for (let y = 0; y < this.worldHeight; y += 60) {
-        lines.moveTo(x, y);
-        lines.lineTo(x, y + 30);
+    this.roadsX = [];
+    this.roadsY = [];
+    for (let x = this.ROAD_WIDTH / 2; x < this.worldWidth; x += this.BLOCK) this.roadsX.push(x);
+    for (let y = this.ROAD_WIDTH / 2; y < this.worldHeight; y += this.BLOCK) this.roadsY.push(y);
+
+    const gfx = this.add.graphics();
+
+    // Здания в клетках между дорогами
+    for (let i = 0; i <= this.roadsX.length; i++) {
+      const left = i === 0 ? 0 : this.roadsX[i - 1] + this.ROAD_WIDTH / 2;
+      const right = i === this.roadsX.length ? this.worldWidth : this.roadsX[i] - this.ROAD_WIDTH / 2;
+      if (right - left < 60) continue;
+
+      for (let j = 0; j <= this.roadsY.length; j++) {
+        const top = j === 0 ? 0 : this.roadsY[j - 1] + this.ROAD_WIDTH / 2;
+        const bottom = j === this.roadsY.length ? this.worldHeight : this.roadsY[j] - this.ROAD_WIDTH / 2;
+        if (bottom - top < 60) continue;
+
+        const margin = 24;
+        const bx = left + margin;
+        const by = top + margin;
+        const bw = (right - left) - margin * 2;
+        const bh = (bottom - top) - margin * 2;
+        if (bw < 30 || bh < 30) continue;
+
+        const shade = Phaser.Math.Between(40, 90);
+        const color = Phaser.Display.Color.GetColor(shade, shade + 10, shade + 20);
+        gfx.fillStyle(color, 1);
+        gfx.fillRect(bx, by, bw, bh);
+        gfx.fillStyle(Phaser.Display.Color.GetColor(shade + 25, shade + 35, shade + 45), 1);
+        gfx.fillRect(bx, by, bw, 10);
+
+        this.buildings = this.buildings || [];
+        this.buildings.push(new Phaser.Geom.Rectangle(bx, by, bw, bh));
       }
-      lines.strokePath();
     }
+
+    // Разметка дорог
+    gfx.lineStyle(4, 0xf5c518, 0.6);
+    this.roadsX.forEach((rx) => {
+      for (let y = 0; y < this.worldHeight; y += 60) {
+        gfx.beginPath();
+        gfx.moveTo(rx, y);
+        gfx.lineTo(rx, y + 30);
+        gfx.strokePath();
+      }
+    });
+    this.roadsY.forEach((ry) => {
+      for (let x = 0; x < this.worldWidth; x += 60) {
+        gfx.beginPath();
+        gfx.moveTo(x, ry);
+        gfx.lineTo(x + 30, ry);
+        gfx.strokePath();
+      }
+    });
 
     this.physics.world.setBounds(0, 0, this.worldWidth, this.worldHeight);
   }
 
+  // ---------- ИГРОК ----------
   buildPlayerCar() {
-    this.playerSprite = this.add.image(this.worldWidth / 2, this.worldHeight / 2, 'car_player');
-    this.playerSprite.setOrigin(0.5, 0.5);
+    this.playerSprite = this.add.image(this.worldWidth / 2, this.worldHeight / 2, 'car_player').setDepth(10);
 
     this.car = new Car({
       x: this.playerSprite.x,
@@ -220,6 +319,211 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  // ---------- NPC ТРАФИК ----------
+  buildTraffic() {
+    this.npcCars = [];
+    const NUM_NPCS = 16;
+
+    for (let i = 0; i < NUM_NPCS; i++) {
+      const vertical = Math.random() < 0.5;
+      const laneSign = Math.random() < 0.5 ? 1 : -1;
+
+      let x, y, vx, vy;
+      const baseSpeed = Phaser.Math.Between(90, 150);
+
+      if (vertical && this.roadsX.length > 0) {
+        const roadX = Phaser.Utils.Array.GetRandom(this.roadsX);
+        x = roadX + laneSign * (this.ROAD_WIDTH / 4);
+        y = Phaser.Math.Between(0, this.worldHeight);
+        vx = 0;
+        vy = baseSpeed * laneSign;
+      } else if (this.roadsY.length > 0) {
+        const roadY = Phaser.Utils.Array.GetRandom(this.roadsY);
+        y = roadY + laneSign * (this.ROAD_WIDTH / 4);
+        x = Phaser.Math.Between(0, this.worldWidth);
+        vx = baseSpeed * laneSign;
+        vy = 0;
+      } else {
+        continue;
+      }
+
+      const sprite = this.add.image(x, y, 'car_npc').setDepth(5);
+      sprite.rotation = Math.atan2(vy, vx) + Math.PI / 2;
+
+      this.npcCars.push({ sprite, x, y, vx, vy, baseSpeed, currentSpeed: baseSpeed });
+    }
+  }
+
+  updateTraffic(dt) {
+    // Замедление, если впереди другая машина на той же полосе
+    this.npcCars.forEach((npc) => {
+      let blocked = false;
+      this.npcCars.forEach((other) => {
+        if (other === npc) return;
+        const sameLane = (npc.vx !== 0 && other.vx !== 0 && Math.sign(npc.vx) === Math.sign(other.vx) && Math.abs(npc.y - other.y) < 20) ||
+                          (npc.vy !== 0 && other.vy !== 0 && Math.sign(npc.vy) === Math.sign(other.vy) && Math.abs(npc.x - other.x) < 20);
+        if (!sameLane) return;
+
+        const ahead = npc.vx !== 0
+          ? Math.sign(npc.vx) * (other.x - npc.x) > 0 && Math.sign(npc.vx) * (other.x - npc.x) < 90
+          : Math.sign(npc.vy) * (other.y - npc.y) > 0 && Math.sign(npc.vy) * (other.y - npc.y) < 90;
+
+        if (ahead) blocked = true;
+      });
+
+      npc.currentSpeed = Phaser.Math.Linear(npc.currentSpeed, blocked ? 0 : npc.baseSpeed, dt * 3);
+      const speedFactor = npc.currentSpeed / (npc.baseSpeed || 1);
+
+      npc.x += npc.vx * speedFactor * dt;
+      npc.y += npc.vy * speedFactor * dt;
+
+      // Заворачиваем в начало карты, если уехал за границу
+      if (npc.x < -60) npc.x = this.worldWidth + 60;
+      if (npc.x > this.worldWidth + 60) npc.x = -60;
+      if (npc.y < -60) npc.y = this.worldHeight + 60;
+      if (npc.y > this.worldHeight + 60) npc.y = -60;
+
+      npc.sprite.x = npc.x;
+      npc.sprite.y = npc.y;
+    });
+  }
+
+  // ---------- ПОЛИЦИЯ ----------
+  spawnPoliceCar() {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = Phaser.Math.Between(500, 800);
+    const x = Phaser.Math.Clamp(this.car.x + Math.cos(angle) * dist, 50, this.worldWidth - 50);
+    const y = Phaser.Math.Clamp(this.car.y + Math.sin(angle) * dist, 50, this.worldHeight - 50);
+
+    const sprite = this.add.image(x, y, 'car_police').setDepth(8);
+
+    const levelBoost = this.wantedLevel;
+    const carModel = new Car({
+      x, y,
+      heading: 0,
+      maxSpeed: 380 + levelBoost * 20,
+      acceleration: 240 + levelBoost * 15,
+      braking: 400,
+      mass: 1.05,
+      grip: 2.4,
+      handling: 2.9 + levelBoost * 0.15,
+      drift: 0.4
+    });
+
+    this.policeCars.push({ sprite, car: carModel });
+  }
+
+  updatePolice(dt) {
+    this.policeCars.forEach((p) => {
+      const dx = this.car.x - p.car.x;
+      const dy = this.car.y - p.car.y;
+      const targetHeading = Math.atan2(dy, dx);
+
+      let angleDiff = targetHeading - p.car.heading;
+      angleDiff = Phaser.Math.Angle.Wrap(angleDiff);
+
+      const steer = Phaser.Math.Clamp(angleDiff / (Math.PI / 3), -1, 1);
+      const dist = Math.hypot(dx, dy);
+
+      const input = {
+        steer,
+        throttle: dist > 40 ? 1 : 0.3,
+        brake: 0,
+        handbrake: Math.abs(angleDiff) > 1.6 && dist < 200
+      };
+
+      p.car.update(dt, input, 1.0);
+      p.sprite.x = p.car.x;
+      p.sprite.y = p.car.y;
+      p.sprite.rotation = p.car.heading + Math.PI / 2;
+    });
+  }
+
+  // ---------- WANTED LEVEL ----------
+  updateWanted(dt) {
+    if (this.wantedCooldown > 0) this.wantedCooldown -= dt;
+
+    // Триггер: столкновение с NPC на скорости
+    if (this.wantedCooldown <= 0 && Math.abs(this.car.forwardSpeed) > 140) {
+      for (const npc of this.npcCars) {
+        const d = Phaser.Math.Distance.Between(this.car.x, this.car.y, npc.x, npc.y);
+        if (d < 45) {
+          this.increaseWanted();
+          this.wantedCooldown = 3;
+          break;
+        }
+      }
+    }
+
+    // Спад розыска, если полиция долго не рядом
+    const anyPoliceClose = this.policeCars.some(p =>
+      Phaser.Math.Distance.Between(this.car.x, this.car.y, p.car.x, p.car.y) < 700
+    );
+
+    if (this.wantedLevel > 0 && !anyPoliceClose) {
+      this.wantedDecayTimer += dt;
+      if (this.wantedDecayTimer > 12) {
+        this.decreaseWanted();
+        this.wantedDecayTimer = 0;
+      }
+    } else {
+      this.wantedDecayTimer = 0;
+    }
+
+    // Проверка поимки (BUSTED)
+    const anyPoliceVeryClose = this.policeCars.some(p =>
+      Phaser.Math.Distance.Between(this.car.x, this.car.y, p.car.x, p.car.y) < 55
+    );
+
+    if (anyPoliceVeryClose && this.wantedLevel > 0) {
+      this.busterTimer += dt;
+      if (this.busterTimer > 1.4 && !this.isBusted) {
+        this.triggerBusted();
+      }
+    } else {
+      this.busterTimer = 0;
+    }
+  }
+
+  increaseWanted() {
+    if (this.wantedLevel >= 5) return;
+    this.wantedLevel++;
+    this.spawnPoliceCar();
+    this.updateWantedHUD();
+  }
+
+  decreaseWanted() {
+    this.wantedLevel = Math.max(0, this.wantedLevel - 1);
+    if (this.policeCars.length > this.wantedLevel) {
+      const removed = this.policeCars.pop();
+      removed.sprite.destroy();
+    }
+    this.updateWantedHUD();
+  }
+
+  triggerBusted() {
+    this.isBusted = true;
+    const { width, height } = this.scale;
+
+    const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.75).setScrollFactor(0).setDepth(2000);
+    const bustedText = this.add.text(width / 2, height * 0.35, 'BUSTED', {
+      fontFamily: 'Arial Black, Arial', fontSize: '52px', color: '#ef4444'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(2001);
+    const failedText = this.add.text(width / 2, height * 0.35 + 60, 'MISSION FAILED', {
+      fontFamily: 'Arial', fontSize: '20px', color: '#ffffff'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(2001);
+
+    const retryBtn = this.add.rectangle(width / 2, height * 0.6, 220, 56, 0x2563eb).setInteractive().setScrollFactor(0).setDepth(2001);
+    this.add.text(width / 2, height * 0.6, 'RETRY', { fontSize: '18px', color: '#ffffff' }).setOrigin(0.5).setScrollFactor(0).setDepth(2002);
+
+    const exitBtn = this.add.rectangle(width / 2, height * 0.6 + 70, 220, 56, 0x374151).setInteractive().setScrollFactor(0).setDepth(2001);
+    this.add.text(width / 2, height * 0.6 + 70, 'EXIT', { fontSize: '18px', color: '#ffffff' }).setOrigin(0.5).setScrollFactor(0).setDepth(2002);
+
+    retryBtn.on('pointerdown', () => this.scene.restart());
+    exitBtn.on('pointerdown', () => this.scene.start('MenuScene'));
+  }
+
+  // ---------- КАМЕРА / УПРАВЛЕНИЕ ----------
   setupCamera() {
     this.cameras.main.setBounds(0, 0, this.worldWidth, this.worldHeight);
     this.cameras.main.startFollow(this.playerSprite, true, 0.08, 0.08);
@@ -241,46 +545,47 @@ class GameScene extends Phaser.Scene {
     this.touchInput = { steerLeft: false, steerRight: false, gas: false, brake: false, handbrake: false };
 
     const makeButton = (x, y, radius, label, onDown, onUp) => {
-      const circle = this.add.circle(x, y, radius, 0xffffff, 0.15)
-        .setScrollFactor(0).setDepth(1000).setInteractive();
-      this.add.text(x, y, label, { fontSize: '16px', color: '#ffffff' })
+      this.add.circle(x, y, radius, 0xffffff, 0.15).setScrollFactor(0).setDepth(1000).setInteractive()
+        .on('pointerdown', onDown).on('pointerup', onUp).on('pointerout', onUp);
+      this.add.text(x, y, label, { fontSize: '15px', color: '#ffffff' })
         .setOrigin(0.5).setScrollFactor(0).setDepth(1001);
-      circle.on('pointerdown', onDown);
-      circle.on('pointerup', onUp);
-      circle.on('pointerout', onUp);
     };
 
     const w = this.scale.width, h = this.scale.height;
 
-    makeButton(70, h - 90, 45, '◀', () => this.touchInput.steerLeft = true, () => this.touchInput.steerLeft = false);
-    makeButton(170, h - 90, 45, '▶', () => this.touchInput.steerRight = true, () => this.touchInput.steerRight = false);
-    makeButton(w - 70, h - 90, 50, 'GAS', () => this.touchInput.gas = true, () => this.touchInput.gas = false);
-    makeButton(w - 170, h - 90, 45, 'BRK', () => this.touchInput.brake = true, () => this.touchInput.brake = false);
-    makeButton(w / 2, h - 60, 40, 'HB', () => this.touchInput.handbrake = true, () => this.touchInput.handbrake = false);
+    // Руль — слева, две кнопки рядом
+    makeButton(w * 0.13, h * 0.86, 38, '◀', () => this.touchInput.steerLeft = true, () => this.touchInput.steerLeft = false);
+    makeButton(w * 0.30, h * 0.86, 38, '▶', () => this.touchInput.steerRight = true, () => this.touchInput.steerRight = false);
+
+    // BRK выше и левее GAS, чтобы не пересекались
+    makeButton(w * 0.72, h * 0.76, 34, 'BRK', () => this.touchInput.brake = true, () => this.touchInput.brake = false);
+    makeButton(w * 0.90, h * 0.86, 48, 'GAS', () => this.touchInput.gas = true, () => this.touchInput.gas = false);
+
+    // Ручник — по центру, отдельная нижняя строка
+    makeButton(w * 0.5, h * 0.94, 28, 'HB', () => this.touchInput.handbrake = true, () => this.touchInput.handbrake = false);
   }
 
   setupHUD() {
     this.speedText = this.add.text(16, 16, '0 km/h', { fontSize: '18px', color: '#ffffff' })
       .setScrollFactor(0).setDepth(1000);
+    this.wantedText = this.add.text(16, 44, '', { fontSize: '20px', color: '#facc15' })
+      .setScrollFactor(0).setDepth(1000);
+    this.updateWantedHUD();
   }
 
-  update(time, delta) {
-    const dt = delta / 1000;
+  updateWantedHUD() {
+    let stars = '';
+    for (let i = 0; i < 5; i++) stars += i < this.wantedLevel ? '★' : '☆';
+    this.wantedText.setText(stars);
+  }
 
+  // ---------- ГЛАВНЫЙ ЦИКЛ ----------
+  update(time, delta) {
+    if (this.isBusted) return;
+
+    const dt = delta / 1000;
     const input = { steer: 0, throttle: 0, brake: 0, handbrake: false };
 
     if (this.cursors.left.isDown || this.keys.left.isDown || this.touchInput.steerLeft) input.steer -= 1;
     if (this.cursors.right.isDown || this.keys.right.isDown || this.touchInput.steerRight) input.steer += 1;
-    if (this.cursors.up.isDown || this.keys.up.isDown || this.touchInput.gas) input.throttle = 1;
-    if (this.cursors.down.isDown || this.keys.down.isDown || this.touchInput.brake) input.brake = 1;
-    if (this.keys.handbrake.isDown || this.touchInput.handbrake) input.handbrake = true;
-
-    this.car.update(dt, input, 1.0);
-
-    this.playerSprite.x = this.car.x;
-    this.playerSprite.y = this.car.y;
-    this.playerSprite.rotation = this.car.heading + Math.PI / 2;
-
-    this.speedText.setText(this.car.getSpeedKmh() + ' km/h');
-  }
-}
+    if (this.cursors.up.is
