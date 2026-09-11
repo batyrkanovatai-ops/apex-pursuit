@@ -1,19 +1,16 @@
-import GameScene from './scenes/GameScene.js';
-
 const config = {
-    type: Phaser.AUTO,
+  type: Phaser.AUTO,
+  parent: 'game-container',
+  backgroundColor: '#111318',
+  scale: {
+    mode: Phaser.Scale.RESIZE,
     width: window.innerWidth,
-    height: window.innerHeight,
-    parent: 'game-container',
-    physics: {
-        default: 'arcade',
-        arcade: { gravity: { x: 0, y: 0 }, debug: false }
-    },
-    scene: [GameScene],
-    scale: {
-        mode: Phaser.Scale.RESIZE,
-        autoCenter: Phaser.Scale.CENTER_BOTH
-    }
+    height: window.innerHeight
+  },
+  input: { activePointers: 3 },
+  physics: { default: 'arcade', arcade: { debug: false } },
+  scene: [MenuScene, GameScene],
+  fps: { target: 60, forceSetTimeOut: false }
 };
 
-new Phaser.Game(config);
+const game = new Phaser.Game(config);
